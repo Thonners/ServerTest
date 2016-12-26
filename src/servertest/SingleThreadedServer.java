@@ -1,6 +1,12 @@
 package servertest;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -20,6 +26,9 @@ public class SingleThreadedServer implements Runnable {
     protected ServerSocket serverSocket = null;
     protected boolean      isStopped    = false;
     protected Thread       runningThread= null;
+    
+    private int connectionCount = -1;
+    File countFile = new File ("/home/mathonwy/ServerProjects/tempFile") ;
 
     /**
      * Constructor
@@ -39,6 +48,7 @@ public class SingleThreadedServer implements Runnable {
         synchronized(this){
             this.runningThread = Thread.currentThread();
         }
+        createCountFile() ;
         openServerSocket();
         
         while(! isStopped()){
@@ -70,17 +80,23 @@ public class SingleThreadedServer implements Runnable {
      */
     private void processClientRequest(Socket clientSocket)
     throws IOException {
-        InputStream  input  = clientSocket.getInputStream();
-        OutputStream output = clientSocket.getOutputStream();
-        // Fancy way of receiving data
+        // Increment connection count
+        incrementConnectionCount();
+        System.out.println("This server has been connected to " + connectionCount + " times.");
+        // Input / Output data streams
         DataInputStream dIn = new DataInputStream(clientSocket.getInputStream());
-        
+        DataOutputStream dOut = new DataOutputStream(clientSocket.getOutputStream()) ;
         
         boolean done = false;
         while(!done) {
             byte messageType = dIn.readByte();
 
             switch(messageType) {
+                case -1: //Client is a receive type client, and is therefore only after data
+                    dOut.writeByte(-1);
+                    dOut.writeUTF("This server session has received: " + --connectionCount + " send-type client connections."); // Reduce connection count, as we're only interested in reporting send type client connections
+                    dOut.flush();
+                    break ;
                 case 1: // Type A
                     System.out.println("Message A: " + dIn.readUTF());
                     break;
@@ -96,20 +112,10 @@ public class SingleThreadedServer implements Runnable {
             }
         }
 
-        long time = System.currentTimeMillis();
-
-        System.out.print("Writing output... ");
-        output.write(("HTTP/1.1 200 OK\n\n<html><body>" +
-                "Singlethreaded Server: " +
-                time +
-                "</body></html>").getBytes());
-        output.close();
-        input.close();
-        System.out.println("Request processed: " + time);
-        
-        
-        System.out.print("Closing dIn... ");
+        System.out.print("Closing sockets... ");
+        dOut.close();
         dIn.close();
+        clientSocket.close();
         System.out.println("Done.");
         
     }
@@ -141,7 +147,54 @@ public class SingleThreadedServer implements Runnable {
         try {
             this.serverSocket = new ServerSocket(this.serverPort);
         } catch (IOException e) {
-            throw new RuntimeException("Cannot open port 8080", e);
+            throw new RuntimeException("Cannot open port " + this.serverPort, e);
         }
+    }
+    
+    private void createCountFile() {
+        // Create the file if it doesn't already exist
+        try {
+            countFile.createNewFile() ;
+        } catch (IOException e) {
+            System.out.println("Error creating file: " + countFile.getAbsolutePath()) ;
+            e.printStackTrace();
+        }
+    }
+    
+    private void incrementConnectionCount() {
+        // Read and add to the previous connection count as stored in the file
+        try (BufferedReader in = new BufferedReader(new FileReader(countFile))) {
+            // Read the file
+            String text ; 
+            // Check file has content
+            if ((text = in.readLine()) == null) {
+                // If not, assume it's the first time the server has created this file
+                connectionCount = 1 ;
+            } else {
+                // Otherwise, read the count
+                try {
+                    int countRead = Integer.parseInt(text) ;
+                    System.out.println("Previous count = " + countRead) ;
+                    connectionCount = ++countRead ;
+                    System.out.println("Current count = " + connectionCount) ;
+                } catch (Exception e) {
+                    System.out.println("Error parsing int in file. Text = " + text) ;
+                    e.printStackTrace();                
+                }       
+            }
+        } catch (IOException e) {
+            System.out.println("Error creating BufferedReader for : " + countFile.getAbsolutePath()) ;
+            e.printStackTrace();
+        } 
+        
+        // Write the value back for next time (try-with-resources) much shorter!
+        try (BufferedWriter out = new BufferedWriter(new FileWriter(countFile)) ){
+            // Write the connection count
+            out.write(connectionCount + "");
+            // No need to close the BW in a try-with-resources block
+        }  catch (IOException e) {
+            System.out.println("Error creating BufferedWriter for : " + countFile.getAbsolutePath()) ;
+            e.printStackTrace();
+        }       
     }
 }
