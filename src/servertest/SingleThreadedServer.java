@@ -1,5 +1,6 @@
 package servertest;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -71,8 +72,33 @@ public class SingleThreadedServer implements Runnable {
     throws IOException {
         InputStream  input  = clientSocket.getInputStream();
         OutputStream output = clientSocket.getOutputStream();
+        // Fancy way of receiving data
+        DataInputStream dIn = new DataInputStream(clientSocket.getInputStream());
+        
+        
+        boolean done = false;
+        while(!done) {
+            byte messageType = dIn.readByte();
+
+            switch(messageType) {
+                case 1: // Type A
+                    System.out.println("Message A: " + dIn.readUTF());
+                    break;
+                case 2: // Type B
+                    System.out.println("Message B: " + dIn.readUTF());
+                    break;
+                case 3: // Type C
+                    System.out.println("Message C [1]: " + dIn.readUTF());
+                    System.out.println("Message C [2]: " + dIn.readUTF());
+                    break;
+                default:
+                    done = true;
+            }
+        }
+
         long time = System.currentTimeMillis();
 
+        System.out.print("Writing output... ");
         output.write(("HTTP/1.1 200 OK\n\n<html><body>" +
                 "Singlethreaded Server: " +
                 time +
@@ -80,6 +106,12 @@ public class SingleThreadedServer implements Runnable {
         output.close();
         input.close();
         System.out.println("Request processed: " + time);
+        
+        
+        System.out.print("Closing dIn... ");
+        dIn.close();
+        System.out.println("Done.");
+        
     }
 
     /**

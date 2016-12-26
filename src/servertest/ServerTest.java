@@ -8,7 +8,7 @@ package servertest;
  */
 public class ServerTest {
 
-    private static final int serverPort = 9000 ;
+    private static final int serverPort = 9000 ;    // 9000 if running locally on laptop, 8080 if on Pi
     
     /**
      * @param args the command line arguments
